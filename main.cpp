@@ -55,11 +55,11 @@ struct ItemsToMerge
 };
 
 
-void flexible_nms(QVector<Rect>& items)
+void flexible_nms(int avgItems, QVector<Rect>& items)
 {
     double iou_threshold=0.3;
     double iou_merge_threshold=0.75;
-    double merge_pow=4;
+    double merge_pow=4.0;
 
     sort(begin(items), end(items), [](const Rect& r1, const Rect& r2) {return r1.confidence > r2.confidence;});
 
@@ -115,6 +115,13 @@ void flexible_nms(QVector<Rect>& items)
             row.y0 = y0/totalConf;
             row.y1 = y1/totalConf;
         }
+
+        double totalConf = 0.0;
+        for (int i=0; i<min(itemsToMerge.size(), avgItems); i++)
+        {
+            totalConf += items[itemsToMerge[i].offset].confidence;
+        }
+        row.confidence = totalConf/avgItems;
     }
 }
 
@@ -129,19 +136,21 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    int avgImages = 3*2*3*3; // 3 sizes * 2 flip * 3 epoch * 3 models
+
     QMap<std::string, ImageRects> itemsMap;
     int rectsCount = 0;
     int imagesCount = 0;
 
-
-    for (int fnIdx = 1; fnIdx < argc; fnIdx++)
+    int nbFiles = argc-1;
+    for (int fnIdx = 0; fnIdx < nbFiles; fnIdx++)
     {
-        io::CSVReader<6> in(argv[fnIdx]);
+        io::CSVReader<6> in(argv[fnIdx+1]);
         in.read_header(io::ignore_extra_column, "image_filename", "x0", "y0", "x1", "y1", "confidence");
 
         std::string image_filename;
 
-        qDebug() << "Loading data..." << argv[fnIdx];
+        qDebug() << "Loading data..." << argv[fnIdx+1];
         Rect r;
 
         while(in.read_row(image_filename, r.x0, r.y0, r.x1, r.y1, r.confidence)) {
@@ -166,11 +175,12 @@ int main(int argc, char *argv[])
     printf("image_filename,x0,y0,x1,y1,label,confidence\n");
     for (ImageRects& rects: itemsList)
     {
-        flexible_nms(rects.rects);
+        flexible_nms(avgImages, rects.rects);
         for (const Rect &r: rects.rects)
         {
             if (!r.dropped)
             {
+//                if (r.confidence > 0.001)
                 printf("%s,%.1f,%.1f,%.1f,%.1f,car,%.3f\n",
                        rects.image_filename.c_str(),
                        r.x0, r.y0, r.x1, r.y1, r.confidence);
