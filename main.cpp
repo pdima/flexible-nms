@@ -12,11 +12,11 @@ using namespace std;
 
 struct Rect
 {
-    double x0;
-    double y0;
-    double x1;
-    double y1;
-    double confidence;
+    float x0;
+    float y0;
+    float x1;
+    float y1;
+    float confidence;
     bool dropped {false};
 };
 
@@ -58,15 +58,15 @@ struct ItemsToMerge
 
 void flexible_nms(int avgItems, QVector<Rect>& items)
 {
-    double iou_threshold=0.3;
-    double iou_merge_threshold=0.75;
+    double iou_threshold=0.01;
+    double iou_merge_threshold=0.80;
     double merge_pow=4.0;
 
     sort(begin(items), end(items), [](const Rect& r1, const Rect& r2) {return r1.confidence > r2.confidence;});
 
     int nbItems = items.size();
 
-    QVarLengthArray<ItemsToMerge, 64> itemsToMerge;
+    QVarLengthArray<ItemsToMerge, 1024> itemsToMerge;
 
     for (int i=0; i<nbItems; i++)
     {
@@ -86,9 +86,19 @@ void flexible_nms(int avgItems, QVector<Rect>& items)
 
             if (cur_iou > iou_threshold)
             {
-                items[j].dropped = true;
                 if (cur_iou > iou_merge_threshold)
+                {
                     itemsToMerge.append({j, pow(items[j].confidence, merge_pow) });
+                    items[j].dropped = true;
+                }
+                else
+                {
+                    // at iou_threshold conf*0.5, at iou_merge_threshold conf*0.0
+//                    double conf_mul = (1.0-(cur_iou-iou_threshold)); // 1.0*(iou_merge_threshold-cur_iou)/(iou_merge_threshold-iou_threshold);
+                    double sigma = 2.0;
+                    double conf_mul = exp(-cur_iou*cur_iou/sigma);
+                    items[j].confidence *= conf_mul;
+                }
             }
         }
 
@@ -195,8 +205,8 @@ int main(int argc, char *argv[])
         {
             if (!r.dropped)
             {
-//                if (r.confidence > 0.001)
-                printf("%s,%.1f,%.1f,%.1f,%.1f,car,%.3f\n",
+                if (r.confidence > 0.00005)
+                printf("%s,%.2f,%.2f,%.2f,%.2f,car,%.5f\n",
                        rects.image_filename.c_str(),
                        r.x0, r.y0, r.x1, r.y1, r.confidence);
 
