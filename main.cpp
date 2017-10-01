@@ -6,6 +6,7 @@
 
 #include <QVector>
 #include <QDebug>
+#include <QCommandLineParser>
 
 using namespace std;
 
@@ -129,28 +130,42 @@ void flexible_nms(int avgItems, QVector<Rect>& items)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 2)
-    {
-        qDebug() << argc;
-        qDebug() << "Usage: flexible_nms file_name.csv  > output.csv";
-        return 1;
-    }
+    QCoreApplication app(argc, argv);
 
-    int avgImages = 3*2*3*3; // 3 sizes * 2 flip * 3 epoch * 3 models
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Flexible nms");
+    parser.addHelpOption();
+
+    QCommandLineOption avgImagesOption("avg_images",
+                                      QCoreApplication::translate("main",
+                                                                  "Avg conf over avg_images top boxes"),
+                                       "avg_images", "0");
+    parser.addOption(avgImagesOption);
+    parser.addPositionalArgument("files", QCoreApplication::translate("main", "Files to open."), "[files...]");
+    parser.process(app);
+
+    const QStringList files = parser.positionalArguments();
+    int avgImages = parser.value("avg_images").toInt();
+    if (avgImages == 0)
+        avgImages = files.size();
+
+    qDebug() << "Avg over" << avgImages << "boxes";
+
+//    int avgImages = 3*2*3*3; // 3 sizes * 2 flip * 3 epoch * 3 models
 
     QMap<std::string, ImageRects> itemsMap;
     int rectsCount = 0;
     int imagesCount = 0;
 
-    int nbFiles = argc-1;
-    for (int fnIdx = 0; fnIdx < nbFiles; fnIdx++)
+//    int nbFiles = argc-1;
+    for (QString fn: files)
     {
-        io::CSVReader<6> in(argv[fnIdx+1]);
+        io::CSVReader<6> in(fn.toStdString());
         in.read_header(io::ignore_extra_column, "image_filename", "x0", "y0", "x1", "y1", "confidence");
 
         std::string image_filename;
 
-        qDebug() << "Loading data..." << argv[fnIdx+1];
+        qDebug() << "Loading data..." << fn;
         Rect r;
 
         while(in.read_row(image_filename, r.x0, r.y0, r.x1, r.y1, r.confidence)) {
